@@ -307,7 +307,7 @@ const LandingView = ({ onStart }: { onStart: () => void }) => (
       className="btn-primary w-full py-5 text-xl italic tracking-tighter flex items-center justify-center gap-4 group mb-12"
     >
       <span>开启压力扫描</span>
-      <span className="transition-transform group-active:translate-x-4">>></span>
+      <span className="transition-transform group-active:translate-x-4">&gt;&gt;</span>
     </button>
 
     {/* 8个等级详情展示区 */}
