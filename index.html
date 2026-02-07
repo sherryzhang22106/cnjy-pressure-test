@@ -1,0 +1,109 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>测测春节你被围攻的压力值</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@500;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --brand-red: #ff4757;
+            --brand-yellow: #feca57;
+            --brand-green: #2ecc71;
+            --brand-black: #2f3542;
+            --brand-bg: #f7f1e3;
+        }
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background-color: var(--brand-bg);
+            color: var(--brand-black);
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+            overflow-x: hidden;
+        }
+        /* PC 端布满背景，容器响应式居中 */
+        #root {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            background-image: radial-gradient(var(--brand-black) 0.5px, transparent 0.5px);
+            background-size: 30px 30px;
+        }
+        .content-container {
+            width: 100%;
+            max-width: 550px; /* 回归标准 H5 宽度，避免在 PC 端显得傻大 */
+            margin: 0 auto;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--brand-bg);
+            border-left: 2px solid var(--brand-black);
+            border-right: 2px solid var(--brand-black);
+            box-shadow: 0 0 40px rgba(0,0,0,0.05);
+        }
+        /* 波普风格控件优化：减轻厚重感 */
+        .neo-box {
+            background: white;
+            border: 2px solid var(--brand-black);
+            box-shadow: 3px 3px 0px var(--brand-black);
+            transition: all 0.1s ease;
+        }
+        .neo-box:active:not(.no-active) {
+            transform: translate(1px, 1px);
+            box-shadow: 1px 1px 0px var(--brand-black);
+        }
+        .btn-primary {
+            background: var(--brand-red);
+            color: white;
+            border: 2px solid var(--brand-black);
+            box-shadow: 3px 3px 0px var(--brand-black);
+            font-weight: 900;
+        }
+        .btn-primary:active {
+            transform: translate(1px, 1px);
+            box-shadow: 1px 1px 0px var(--brand-black);
+        }
+        @keyframes scan {
+            0% { top: 0%; }
+            100% { top: 100%; }
+        }
+        .scan-line {
+            height: 3px;
+            background: var(--brand-red);
+            position: absolute;
+            width: 100%;
+            z-index: 10;
+            box-shadow: 0 0 10px var(--brand-red);
+            animation: scan 2s linear infinite;
+        }
+        /* 打印适配 */
+        @media print {
+            body { background: white !important; }
+            .content-container { max-width: 100% !important; border: none !important; margin: 0 !important; box-shadow: none !important; }
+            .no-print { display: none !important; }
+            .neo-box { box-shadow: none !important; border: 1px solid black !important; break-inside: avoid; }
+        }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.40.0",
+    "jspdf": "https://esm.sh/jspdf@^2.5.1",
+    "html2canvas": "https://esm.sh/html2canvas@^1.4.1"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body>
+    <div id="root"></div>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>
