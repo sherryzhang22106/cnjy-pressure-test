@@ -9,7 +9,11 @@ const SERIAL_NO = process.env.WECHAT_SERIAL_NO || '';
 const PRIVATE_KEY = process.env.WECHAT_PRIVATE_KEY || '';
 const APP_SECRET = process.env.WECHAT_APP_SECRET || '';
 const NOTIFY_URL = process.env.WECHAT_NOTIFY_URL || '';
-const SITE_URL = process.env.SITE_URL || 'https://cnjy.bettermee.cn';
+const SITE_URL = process.env.SITE_URL || 'https://cj.bettermee.cn';
+
+// 小程序配置（如果与公众号不同，需要单独配置）
+const MINI_APPID = process.env.WECHAT_MINI_APPID || APPID;
+const MINI_APP_SECRET = process.env.WECHAT_MINI_APP_SECRET || APP_SECRET;
 
 // 生成随机字符串
 function generateNonceStr(length = 32): string {
@@ -46,7 +50,7 @@ function generateOrderNo(): string {
   return `CNJY${dateStr}${random}`;
 }
 
-// 通过 code 获取 openid
+// 通过 code 获取 openid（公众号 OAuth）
 async function getOpenId(code: string): Promise<string> {
   if (!APP_SECRET) {
     throw new Error('缺少 APP_SECRET 配置');
@@ -64,6 +68,98 @@ async function getOpenId(code: string): Promise<string> {
   return result.openid;
 }
 
+// 小程序 code2session 获取 openid
+async function miniCode2Session(code: string): Promise<{ openid: string; session_key: string }> {
+  if (!MINI_APP_SECRET) {
+    throw new Error('缺少小程序 APP_SECRET 配置');
+  }
+
+  const url = `https://api.weixin.qq.com/sns/jscode2session?appid=${MINI_APPID}&secret=${MINI_APP_SECRET}&js_code=${code}&grant_type=authorization_code`;
+  const response = await fetch(url);
+  const result = await response.json();
+
+  if (result.errcode) {
+    console.error('小程序 code2session 失败:', result);
+    throw new Error(result.errmsg || '获取用户信息失败');
+  }
+
+  return {
+    openid: result.openid,
+    session_key: result.session_key,
+  };
+}
+
+// 创建小程序支付订单
+async function createMiniProgramPayment(visitorId: string, openid: string, amount: number, description: string): Promise<any> {
+  if (!PRIVATE_KEY || !API_KEY) {
+    throw new Error('支付配置未完成');
+  }
+
+  const orderNo = generateOrderNo();
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const nonceStr = generateNonceStr();
+  const totalFen = Math.round(amount * 100);
+
+  const requestBody = {
+    appid: MINI_APPID,  // 使用小程序 AppID
+    mchid: MCHID,
+    description: description || '春节压力测评报告',
+    out_trade_no: orderNo,
+    time_expire: new Date(Date.now() + 30 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, '+08:00'),
+    notify_url: `${SITE_URL}/api/notify`,
+    amount: {
+      total: totalFen,
+      currency: 'CNY'
+    },
+    attach: visitorId,
+    payer: {
+      openid: openid
+    }
+  };
+
+  const bodyStr = JSON.stringify(requestBody);
+  const urlPath = '/v3/pay/transactions/jsapi';
+  const signature = generateSignature('POST', urlPath, timestamp, nonceStr, bodyStr);
+  const authorization = `WECHATPAY2-SHA256-RSA2048 mchid="${MCHID}",nonce_str="${nonceStr}",signature="${signature}",timestamp="${timestamp}",serial_no="${SERIAL_NO}"`;
+
+  const response = await fetch('https://api.mch.weixin.qq.com/v3/pay/transactions/jsapi', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': authorization,
+    },
+    body: bodyStr,
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    console.error('小程序支付创建失败:', result);
+    throw new Error(result.message || '创建支付订单失败');
+  }
+
+  // 生成小程序调起支付需要的参数
+  const payTimestamp = Math.floor(Date.now() / 1000).toString();
+  const payNonceStr = generateNonceStr();
+  const packageStr = `prepay_id=${result.prepay_id}`;
+
+  // 签名（使用小程序 AppID）
+  const payMessage = `${MINI_APPID}\n${payTimestamp}\n${payNonceStr}\n${packageStr}\n`;
+  const paySign = crypto.createSign('RSA-SHA256');
+  paySign.update(payMessage);
+  const paySignature = paySign.sign(getPrivateKey(), 'base64');
+
+  return {
+    orderNo,
+    timeStamp: payTimestamp,
+    nonceStr: payNonceStr,
+    package: packageStr,
+    signType: 'RSA',
+    paySign: paySignature,
+  };
+}
+
 // 创建 Native 支付订单（PC扫码）
 async function createNativePayment(visitorId: string, amount: number, description: string): Promise<any> {
   if (!PRIVATE_KEY || !API_KEY) {
@@ -75,13 +171,17 @@ async function createNativePayment(visitorId: string, amount: number, descriptio
   const nonceStr = generateNonceStr();
   const totalFen = Math.round(amount * 100);
 
+  // 构建 notify_url（不能带查询参数）
+  const notifyUrl = `${SITE_URL}/api/notify`;
+  console.log('Final notify_url:', notifyUrl);
+
   const requestBody = {
     appid: APPID,
     mchid: MCHID,
     description: description || '春节压力测评报告',
     out_trade_no: orderNo,
     time_expire: new Date(Date.now() + 30 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, '+08:00'),
-    notify_url: NOTIFY_URL || `${SITE_URL}/api/payment?action=notify`,
+    notify_url: notifyUrl,
     amount: {
       total: totalFen,
       currency: 'CNY'
@@ -136,7 +236,7 @@ async function createJsapiPayment(visitorId: string, openid: string, amount: num
     description: description || '春节压力测评报告',
     out_trade_no: orderNo,
     time_expire: new Date(Date.now() + 30 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, '+08:00'),
-    notify_url: NOTIFY_URL || `${SITE_URL}/api/payment?action=notify`,
+    notify_url: `${SITE_URL}/api/notify`,
     amount: {
       total: totalFen,
       currency: 'CNY'
@@ -285,6 +385,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const openid = await getOpenId(code);
       const data = await createJsapiPayment(visitorId, openid, amount, description);
       return res.status(200).json({ success: true, data });
+    }
+
+    // POST /api/payment?action=miniprogram - 创建小程序支付
+    if (req.method === 'POST' && action === 'miniprogram') {
+      const { code, visitorId, amount = 0.99, description = '春节压力测评报告' } = req.body;
+      if (!code) {
+        return res.status(400).json({ error: '缺少登录 code' });
+      }
+
+      // 通过 code 获取 openid
+      const { openid } = await miniCode2Session(code);
+
+      // 创建支付订单
+      const data = await createMiniProgramPayment(visitorId || 'mini_user', openid, amount, description);
+      return res.status(200).json({ success: true, data });
+    }
+
+    // POST /api/payment?action=code2session - 小程序获取 openid（不创建支付）
+    if (req.method === 'POST' && action === 'code2session') {
+      const { code } = req.body;
+      if (!code) {
+        return res.status(400).json({ error: '缺少登录 code' });
+      }
+
+      const { openid } = await miniCode2Session(code);
+      return res.status(200).json({ success: true, openid });
     }
 
     // GET /api/payment?action=query&orderNo=xxx - 查询支付状态
