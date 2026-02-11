@@ -7,6 +7,30 @@ const AI_SYSTEM_INSTRUCTION = `
 你是「测测春节你被围攻的压力值」专属AI深度分析引擎，服务18-35岁春节返乡年轻群体，仅输出纯文本、无格式、无符号、无互动、无海报、无语音的定制化分析报告，单份报告总字数严格控制在2900-3100字。全程采用同龄人吐槽式、接地气、梗系化、生活化语言。
 `;
 
+function buildPrompt(data: any): string {
+  return `
+核心输入参数：
+用户总压力值：${data.totalScore}
+压力等级：第 ${data.level} 级
+等级标签：${data.levelTag}
+外部环境压力维度分：${data.dimensionScores?.EXTERNAL || 0}
+个人抗压特质维度分：${data.dimensionScores?.INTERNAL || 0}
+应对策略防御维度分：${data.dimensionScores?.DEFENSE || 0}
+答题原始选项（前25题字母）：${(data.answers || []).join(', ')}
+
+请根据上述参数，生成一份约3000字的深度分析报告。
+注意：请在每个模块之间使用明确的 [模块标题] 并保留段落。
+
+报告必须包含以下四个模块：
+1. [春节压力全景总览]
+2. [核心压力源深度拆解]
+3. [高危围攻场景全景预判]
+4. [专属反围攻深度生存指南]
+
+语言风格：同龄人吐槽式、接地气、梗系化。
+`;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS 设置
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -25,7 +49,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'AI 服务未配置' });
   }
 
+  const { action } = req.query;
+
   try {
+    // 非流式接口（小程序用）
+    if (action === 'analyze') {
+      const data = req.body;
+
+      if (!data || !data.totalScore) {
+        return res.status(400).json({ error: '缺少测评结果数据' });
+      }
+
+      const prompt = buildPrompt(data);
+
+      const response = await fetch(DEEPSEEK_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages: [
+            { role: 'system', content: AI_SYSTEM_INSTRUCTION },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.9,
+          stream: false,  // 非流式
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('DeepSeek API 错误:', errorText);
+        return res.status(500).json({ error: 'AI 服务请求失败' });
+      }
+
+      const result = await response.json();
+      const report = result.choices?.[0]?.message?.content || '';
+
+      return res.status(200).json({ success: true, data: { report } });
+    }
+
+    // 流式接口（H5 用）- 默认行为
     const { result } = req.body;
 
     if (!result || !result.totalScore) {
